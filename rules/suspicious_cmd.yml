@@ -1,0 +1,16 @@
+title: Suspicious Command Prompt
+id: e31f1fc0-82ba-4f0b-a30c-a928f3319ad7
+description: Detect suspicious usage of cmd.exe
+status: experimental
+references:
+  - https://attack.mitre.org/techniques/T1059.003/
+tags:
+  - attack.execution
+  - attack.t1059.003
+logsource:
+  product: windows
+detection:
+  selection:
+    CommandLine|contains: "cmd.exe"
+  condition: selection
+level: high

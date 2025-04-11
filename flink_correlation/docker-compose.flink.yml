@@ -1,0 +1,30 @@
+version: '3.8'
+services:
+  jobmanager:
+    image: flink:1.15.0
+    container_name: flink_jobmanager
+    ports:
+      - "8081:8081"
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=jobmanager
+    command: jobmanager
+  taskmanager:
+    image: flink:1.15.0
+    container_name: flink_taskmanager
+    depends_on:
+      - jobmanager
+    command: taskmanager
+  # you'd also need to make sure it can talk to Kafka: pass KAFKA_BROKER config to the container
+  # and set up the Kafka connector in Flink
+  # this is just a placeholder for the Kafka connector setup
+  kafka_connector:
+    image: flink:1.15.0
+    container_name: flink_kafka_connector
+    depends_on:
+      - jobmanager
+      - taskmanager
+    command: connector --type kafka --properties bootstrap.servers=kafka:9092 --properties group.id=flink_group
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - KAFKA_TOPIC=flink_topic
+

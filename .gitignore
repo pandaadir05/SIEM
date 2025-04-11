@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+env/
+venv/
+
+# Node/React
+node_modules/
+build/
+dist/
+
+# Logs or local data
+*.log
+test_logs/
+.DS_Store
+Thumbs.db
+
+# Maven/Java
+target/
+*.class
+
+# Misc
+.idea/
+*.iml
+*.swp
+.env

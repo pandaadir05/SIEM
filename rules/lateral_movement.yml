@@ -1,0 +1,14 @@
+title: Possible Lateral Movement
+id: 44444444-2222-3333-9999-a928f7777aa7
+description: Detect suspicious remote connections
+status: experimental
+tags:
+  - attack.lateral_movement
+  - attack.t1047
+logsource:
+  product: windows
+detection:
+  selection:
+    CommandLine|contains: "psexec"
+  condition: selection
+level: high
