@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Container, Typography, Grid, Paper, Box, CircularProgress, Alert } from '@mui/material';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Container, Typography, Grid, Paper, Box, CircularProgress, Alert, Button } from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { getStats } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext'; // Import useAuth
 
@@ -8,31 +9,55 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { user } = useAuth(); // Get user info
+  const [refreshInterval, setRefreshInterval] = useState(30000); // 30 seconds
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        console.log('Fetching dashboard stats...');
-        const data = await getStats();
-        console.log('Dashboard stats received:', data);
-        setStats(data);
-      } catch (err) {
-        console.error('Error fetching dashboard stats:', err);
-        // Set specific error message for unauthorized
-        if (err.status === 401) {
-          setError('Unauthorized: Please log in again.');
-        } else {
-          setError(err.message || 'Failed to load dashboard data.');
-        }
-      } finally {
-        setLoading(false);
+  const fetchStats = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      console.log('Fetching dashboard stats...');
+      const data = await getStats();
+      console.log('Dashboard stats received:', data);
+      setStats(data);
+    } catch (err) {
+      console.error('Error fetching dashboard stats:', err);
+      // Set specific error message for unauthorized
+      if (err.status === 401) {
+        setError('Unauthorized: Please log in again.');
+      } else {
+        setError(err.message || 'Failed to load dashboard data.');
       }
-    };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
+  // Initial fetch
+  useEffect(() => {
     fetchStats();
-  }, []); // Re-fetch if needed, e.g., on user change: [user]
+  }, [fetchStats]);
+
+  // Set up auto-refresh
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetchStats();
+    }, refreshInterval);
+
+    return () => clearInterval(intervalId);
+  }, [fetchStats, refreshInterval]);
+
+  // Add refresh button to UI
+  const refreshButton = (
+    <Button 
+      startIcon={<RefreshIcon />}
+      onClick={fetchStats}
+      variant="outlined"
+      disabled={loading}
+      sx={{ mb: 2 }}
+    >
+      Refresh Data
+    </Button>
+  );
 
   if (loading) {
     return (
@@ -45,9 +70,12 @@ const Dashboard = () => {
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Typography variant="h4" gutterBottom>
-        SIEM Dashboard {user ? `(Welcome, ${user.username})` : ''}
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h4" gutterBottom>
+          SIEM Dashboard {user ? `(Welcome, ${user.username})` : ''}
+        </Typography>
+        {refreshButton}
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>

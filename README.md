@@ -39,82 +39,52 @@ SIEM/
 
 ## ⚡ Quick Start
 
-> Requirements: `Docker`, `Python 3.13` (Recommended, 3.11+ supported), `Node.js` (for UI), `Kafka`, `Elasticsearch`
+1. **Clone the Repo:**
+   ```bash
+   git clone https://github.com/YourUsername/SIEM.git
+   cd SIEM
+   ```
 
-### 🐳 Run Services with Docker (Recommended)
+2. **(Recommended) Run with Docker:**
+   ```bash
+   docker-compose up -d --build
+   ```
+   This starts Zookeeper, Kafka, Elasticsearch, Kibana, and the Python services. Once all containers are up, you can generate logs (optional) and visit Kibana at http://localhost:5601.
 
-This is the easiest way to get all components running.
+3. **Run Locally (Alternative):**
+   - Set up a virtual environment and install dependencies:
+     ```bash
+     python -m venv .venv
+     . .venv/bin/activate       # (on linux/mac)
+     .\.venv\Scripts\activate   # (on Windows)
+     pip install -r requirements.txt
+     ```
+   - Start services (Zookeeper, Kafka, Elasticsearch, Kibana) via Docker:
+     ```bash
+     docker-compose up -d zookeeper kafka elasticsearch kibana
+     ```
+   - Run the log generator (optional):
+     ```bash
+     python ingestion/dummy_generator.py
+     ```
+   - Index logs into Elasticsearch:
+     ```bash
+     python consumer/indexer.py
+     ```
+   - Optionally launch the correlation engine, LLM assistant, and back-end API:
+     ```bash
+     python correlation/correlation_engine.py
+     python llm/llm_assistant.py
+     python ui/backend_api/app.py
+     ```
 
-```bash
-# Build and start all services defined in docker-compose.yml
-docker-compose up -d --build
-```
-
-This will start Zookeeper, Kafka, Elasticsearch, Kibana, and the custom Python services (indexer, correlation-engine, backend-api) inside Docker containers.
-
-### 🏃 Run Components Locally (Alternative)
-
-If you prefer to run Python components directly on your host machine:
-
-1.  **Start Infrastructure:** Ensure Docker is running and start the core infrastructure:
-    ```bash
-    docker-compose up -d zookeeper kafka elasticsearch kibana
-    ```
-
-2.  **Set up Python Environment:** Create and activate a virtual environment, then install dependencies:
-    ```bash
-    # Navigate to the project root directory
-    cd path/to/SIEM
-
-    # Create virtual environment
-    python -m venv .venv
-
-    # Activate (Windows)
-    .\.venv\Scripts\activate
-    # Activate (macOS/Linux)
-    # source .venv/bin/activate
-
-    # Install requirements
-    pip install -r requirements.txt
-    ```
-
-3.  **Run Python Scripts (in separate terminals):**
-    *   **Ingest Logs (Agent → Kafka):**
-        ```bash
-        python ingestion/agent.py
-        ```
-        *(Or use `dummy_generator.py` for testing)*
-        ```bash
-        # python ingestion/dummy_generator.py
-        ```
-    *   **Index Logs (Kafka → Elasticsearch):**
-        ```bash
-        python consumer/indexer.py
-        ```
-    *   **Run Sigma Correlation Engine:**
-        ```bash
-        # Note: The command in docker-compose uses -m, adjust if needed based on your structure
-        python correlation/correlation_engine.py
-        ```
-    *   **Start LLM Triage Assistant (Optional):**
-        ```bash
-        # Make sure to set your OPENAI_API_KEY environment variable if using OpenAI
-        python llm/llm_assistant.py
-        ```
-    *   **Start Backend API:**
-        ```bash
-        # Ensure you are in the SIEM root directory for imports to work
-        python ui/backend_api/app.py
-        ```
-
-### 📊 Frontend (React)
-
-```bash
-cd ui/frontend
-npm install
-npm start
-```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+4. **Frontend Setup:**
+   ```bash
+   cd ui/frontend
+   npm install
+   npm start
+   ```
+   Open http://localhost:3000 in your browser.
 
 ---
 
@@ -213,6 +183,36 @@ If components can't connect to Elasticsearch, ensure:
 1. Elasticsearch container is running: `docker ps | grep elasticsearch`
 2. You can access it: `curl http://localhost:9200`
 3. Environment variables are correct if you've customized the setup
+
+---
+
+### Data Flow Issues
+
+If you see alerts in Elasticsearch but not logs, or the React frontend isn't updating with new data:
+
+1. **Verify Kafka Topic Health:**
+   ```bash
+   python consumer/check_topics.py
+   ```
+   This will show if messages are flowing into Kafka. You should see messages in the `logs_raw` topic.
+
+2. **Check Elasticsearch Indices:**
+   ```bash
+   python consumer/debugging.py
+   ```
+   Ensure both `logs` and `alerts` indices exist and contain documents.
+
+3. **React Frontend Refresh Issues:**
+   - The default React implementation doesn't automatically refresh data
+   - Add manual refresh by clicking the refresh button in the UI
+   - Check browser console (F12) for API errors when fetching data
+   - Verify API endpoints return data: `http://localhost:5000/api/logs` and `http://localhost:5000/api/alerts`
+
+4. **Timestamp Format Issues:**
+   If logs aren't appearing in Kibana despite being in Elasticsearch, check that:
+   - The `@timestamp` field exists and is properly formatted
+   - Your time filter in Kibana is set to an appropriate range
+   - The index pattern is correctly configured with `@timestamp` as the time field
 
 ---
 

@@ -144,18 +144,16 @@ function TimelineView() {
   
   const containerRef = useRef(null);
   
+  // Modified fetchEvents to remove the dependency on itself
   const fetchEvents = useCallback(async (resetPage = false) => {
-    if (resetPage) {
-      setPage(1);
-    }
+    const currentPage = resetPage ? 1 : page;
     
     setIsLoading(true);
     setError(null);
     
     try {
-      // Build query parameters
       const params = {
-        page: resetPage ? 1 : page,
+        page: currentPage,
         size: pageSize,
         q: searchQuery || undefined,
         type: filterType !== 'all' ? filterType : undefined,
@@ -173,8 +171,18 @@ function TimelineView() {
     }
   }, [page, pageSize, searchQuery, filterType, timeRange]);
 
+  // Initial fetch
   useEffect(() => {
     fetchEvents();
+  }, [fetchEvents]);
+  
+  // Add automatic refresh (e.g., every 30 seconds)
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetchEvents();
+    }, 30000);
+    
+    return () => clearInterval(intervalId);
   }, [fetchEvents]);
   
   const handleSearch = (e) => {
