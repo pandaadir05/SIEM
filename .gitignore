@@ -25,3 +25,5 @@ target/
 *.iml
 *.swp
 .env
+
+.github

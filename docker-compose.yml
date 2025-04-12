@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:latest
@@ -7,6 +9,21 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-log:/var/lib/zookeeper/log
+    networks:
+      - siem-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   kafka:
     image: confluentinc/cp-kafka:latest
@@ -21,6 +38,24 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_DELETE_TOPIC_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168  # 7 days
+      KAFKA_HEAP_OPTS: "-Xmx1G -Xms512M"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - siem-network
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.17.6
@@ -28,9 +63,30 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - cluster.name=siem-cluster
+      - node.name=siem-node
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
     ports:
       - "9200:9200"
+    networks:
+      - siem-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
 
   kibana:
     image: docker.elastic.co/kibana/kibana:7.17.6
@@ -39,8 +95,22 @@ services:
       - elasticsearch
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=kibana.siem
+      - SERVER_PUBLICBASEURL=http://localhost:5601
     ports:
       - "5601:5601"
+    networks:
+      - siem-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5601/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   correlation-engine:
     build:
@@ -57,8 +127,18 @@ services:
       - ALERTS_TOPIC=alerts
       - ALERT_INDEX=alerts
       - CORRELATION_WINDOW_SECONDS=300
+      - PYTHONUNBUFFERED=1
+      - KAFKA_GROUP_ID_PREFIX=siem
+    volumes:
+      - ./rules:/app/rules
+      - correlation-logs:/app/logs
+    networks:
+      - siem-network
     restart: unless-stopped
-    command: ["python", "-m", "correlation.correlation_engine"]
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   indexer:
     build:
@@ -74,12 +154,20 @@ services:
       - LOGS_TOPIC=logs_raw
       - LOGS_INDEX=logs
       - PYTHONUNBUFFERED=1
+      - KAFKA_GROUP_ID_PREFIX=siem
+    volumes:
+      - indexer-logs:/app/logs
+    networks:
+      - siem-network
     restart: unless-stopped
-    command: ["python", "consumer/indexer.py"]
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   backend-api:
     build:
-      context: .
+      context: . 
       dockerfile: ./ui/backend_api/Dockerfile
     container_name: siem_backend_api
     ports:
@@ -90,10 +178,56 @@ services:
       - ES_HOST=http://elasticsearch:9200
       - LOGS_INDEX=logs
       - ALERT_INDEX=alerts
-      - API_SECRET_KEY=change-this-in-production-via-env-file
+      - API_SECRET_KEY=${API_SECRET_KEY:-change-this-in-production-via-env-file}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-this-in-production-via-env-file}
       - API_PORT=5000
       - FLASK_APP=app.py
       - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
+      - RATE_LIMIT_DEFAULT=100/hour
+    volumes:
+      - backend-logs:/app/logs
+    networks:
+      - siem-network
     restart: unless-stopped
-    command: ["gunicorn", "-b", "0.0.0.0:5000", "ui.backend_api.app:app"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  frontend:
+    build:
+      context: ./ui/frontend
+      dockerfile: Dockerfile
+    container_name: siem_frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend-api
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000/api
+    networks:
+      - siem-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+networks:
+  siem-network:
+    driver: bridge
+
+volumes:
+  zookeeper-data:
+  zookeeper-log:
+  kafka-data:
+  elasticsearch-data:
+  correlation-logs:
+  indexer-logs:
+  backend-logs:
