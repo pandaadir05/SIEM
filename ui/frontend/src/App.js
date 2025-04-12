@@ -1,23 +1,18 @@
 import React from 'react';
-import { BrowserRouter as Router, Route, Switch, Link } from 'react-router-dom';
-import Dashboard from './pages/Dashboard';
-import TimelineView from './components/TimelineView';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Dashboard from './components/Dashboard/Dashboard';
 
 function App() {
-  return (
-    <Router>
-      <div style={{padding:20}}>
-        <h1>My Next-Gen SIEM UI</h1>
-        <nav>
-          <Link to="/">Dashboard</Link> | <Link to="/timeline">Timeline</Link>
-        </nav>
-        <Switch>
-          <Route exact path="/" component={Dashboard} />
-          <Route path="/timeline" component={TimelineView} />
-        </Switch>
-      </div>
-    </Router>
-  );
+    return (
+        <Router>
+            <Routes>
+                <Route path="/" element={<Dashboard />} />
+            </Routes>
+        </Router>
+    );
 }
 
 export default App;
+
+// Note: The suggested code change involves running commands in the terminal to install dependencies.
+// These commands cannot be incorporated directly into the JavaScript file.
