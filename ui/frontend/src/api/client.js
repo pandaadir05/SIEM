@@ -82,4 +82,8 @@ export const getAlertById = (alertId) => {
   return request(`/alerts/${alertId}`);
 };
 
+export const getStats = () => {
+  return request('/stats');
+};
+
 // Add other API functions as needed (e.g., getRules, updateRule, etc.)
