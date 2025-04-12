@@ -1,6 +1,8 @@
 kafka-python==2.0.2
-elasticsearch==7.17.0
+elasticsearch==7.17.6 # Match ES version if possible
 PyYAML==6.0
 requests==2.31.0
 Flask==2.3.2
 prometheus_client==0.16.0
+python-dotenv==1.0.1 # Added for .env support
+# Add other dependencies like PyJWT if needed
