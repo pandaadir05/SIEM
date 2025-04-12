@@ -1,88 +1,114 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Card, Grid, Typography, CircularProgress, Stack } from '@mui/material';
-import { getStats } from '../../api/client'; // Import getStats
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'; // For critical alerts
-import NotificationsIcon from '@mui/icons-material/Notifications'; // For total alerts
-import AccessTimeIcon from '@mui/icons-material/AccessTime'; // For last updated
+import { Container, Typography, Grid, Paper, Box, CircularProgress, Alert } from '@mui/material';
+import { getStats } from '../../api/client';
+import { useAuth } from '../../contexts/AuthContext'; // Import useAuth
 
 const Dashboard = () => {
-    const [stats, setStats] = useState({
-        totalAlerts: 0,
-        criticalAlerts: 0,
-    });
-    const [isLoading, setIsLoading] = useState(true); // Add loading state
-    const [error, setError] = useState(null);
-    const [lastUpdated, setLastUpdated] = useState(null); // Add last updated state
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const { user } = useAuth(); // Get user info
 
-    useEffect(() => {
-        const fetchStats = async () => {
-            try {
-                setError(null);
-                const data = await getStats();
-                setStats({
-                    totalAlerts: data.totalAlerts || 0,
-                    criticalAlerts: data.criticalAlerts || 0,
-                });
-                setLastUpdated(new Date()); // Record successful update time
-            } catch (error) {
-                console.error('Error fetching dashboard stats:', error);
-                setError(error.message || 'Failed to fetch stats');
-            } finally {
-                if (isLoading) {
-                    setIsLoading(false);
-                }
-            }
-        };
+  useEffect(() => {
+    const fetchStats = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        console.log('Fetching dashboard stats...');
+        const data = await getStats();
+        console.log('Dashboard stats received:', data);
+        setStats(data);
+      } catch (err) {
+        console.error('Error fetching dashboard stats:', err);
+        // Set specific error message for unauthorized
+        if (err.status === 401) {
+          setError('Unauthorized: Please log in again.');
+        } else {
+          setError(err.message || 'Failed to load dashboard data.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
 
-        fetchStats(); // Fetch immediately on mount
-        const interval = setInterval(fetchStats, 15000); // Refresh every 15 seconds
+    fetchStats();
+  }, []); // Re-fetch if needed, e.g., on user change: [user]
 
-        return () => clearInterval(interval); // Cleanup interval on unmount
-    }, [isLoading]); // Re-run effect if isLoading changes (relevant for initial load)
-
+  if (loading) {
     return (
-        <Box sx={{ p: 3 }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="h4" gutterBottom>
-                    SIEM Dashboard
-                </Typography>
-                {isLoading && <CircularProgress size={24} />}
-                {lastUpdated && !isLoading && (
-                    <Stack direction="row" alignItems="center" spacing={0.5}>
-                        <AccessTimeIcon fontSize="small" color="action" />
-                        <Typography variant="caption" color="text.secondary">
-                            Last updated: {lastUpdated.toLocaleTimeString()}
-                        </Typography>
-                    </Stack>
-                )}
-            </Stack>
-
-            {error && <Typography color="error" gutterBottom sx={{ mb: 2 }}>Error: {error}</Typography>}
-
-            <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <NotificationsIcon color="primary" sx={{ fontSize: 40 }} />
-                        <Box>
-                            <Typography variant="h6">Total Alerts</Typography>
-                            <Typography variant="h3">{isLoading ? '-' : stats.totalAlerts}</Typography>
-                        </Box>
-                    </Card>
-                </Grid>
-                <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <ErrorOutlineIcon color={stats.criticalAlerts > 0 ? "error" : "action"} sx={{ fontSize: 40 }} />
-                        <Box>
-                            <Typography variant="h6">Critical Alerts</Typography>
-                            <Typography variant="h3" color={stats.criticalAlerts > 0 ? "error" : "inherit"}>
-                                {isLoading ? '-' : stats.criticalAlerts}
-                            </Typography>
-                        </Box>
-                    </Card>
-                </Grid>
-            </Grid>
-        </Box>
+      <Container sx={{ mt: 4, textAlign: 'center' }}>
+        <CircularProgress />
+        <Typography sx={{ mt: 2 }}>Loading Dashboard...</Typography>
+      </Container>
     );
+  }
+
+  return (
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Typography variant="h4" gutterBottom>
+        SIEM Dashboard {user ? `(Welcome, ${user.username})` : ''}
+      </Typography>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          Error: {error}
+        </Alert>
+      )}
+
+      <Grid container spacing={3}>
+        {/* Example Stat Card */}
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 140 }}>
+            <Typography component="h2" variant="h6" color="primary" gutterBottom>
+              Total Alerts
+            </Typography>
+            <Typography component="p" variant="h4">
+              {stats ? stats.total_alerts : '0'}
+            </Typography>
+          </Paper>
+        </Grid>
+        {/* Example Stat Card */}
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 140 }}>
+            <Typography component="h2" variant="h6" color="error" gutterBottom>
+              Critical Alerts
+            </Typography>
+            <Typography component="p" variant="h4">
+              {stats ? stats.critical_alerts : '0'}
+            </Typography>
+          </Paper>
+        </Grid>
+        {/* Add more stat cards as needed based on your getStats response */}
+         <Grid item xs={12} sm={6} md={3}>
+          <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 140 }}>
+            <Typography component="h2" variant="h6" color="text.secondary" gutterBottom>
+              Events Today
+            </Typography>
+            <Typography component="p" variant="h4">
+              {stats ? stats.events_today : '0'}
+            </Typography>
+          </Paper>
+        </Grid>
+         <Grid item xs={12} sm={6} md={3}>
+          <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column', height: 140 }}>
+            <Typography component="h2" variant="h6" color="text.secondary" gutterBottom>
+              Systems Monitored
+            </Typography>
+            <Typography component="p" variant="h4">
+              {stats ? stats.systems_monitored : '0'}
+            </Typography>
+          </Paper>
+        </Grid>
+        {/* Placeholder for charts or other dashboard elements */}
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
+            <Typography variant="h6">Activity Overview (Placeholder)</Typography>
+            {/* Add charts or other visualizations here */}
+          </Paper>
+        </Grid>
+      </Grid>
+    </Container>
+  );
 };
 
 export default Dashboard;

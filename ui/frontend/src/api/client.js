@@ -2,9 +2,8 @@
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-// Function to get the auth token from context or localStorage
+// Function to get the auth token from localStorage
 const getAuthToken = () => {
-  // Try to get token from localStorage
   return localStorage.getItem('siem_auth_token');
 };
 
@@ -23,8 +22,10 @@ const request = async (endpoint, options = {}) => {
     ...options.headers,
   };
 
-  if (token) {
+  // Don't send auth header for login
+  if (token && !endpoint.includes('login')) {
     headers['Authorization'] = `Bearer ${token}`;
+    console.log('Adding auth token to request');
   }
 
   const config = {
@@ -33,10 +34,17 @@ const request = async (endpoint, options = {}) => {
   };
 
   try {
+    console.log(`Making API request to: ${url}`);
     const response = await fetch(url, config);
+
+    // Log the response status for debugging
+    console.log(`API response status: ${response.status}`);
 
     // Check for unauthorized (could trigger logout)
     if (response.status === 401) {
+      console.error('Unauthorized response received');
+      // Clear token on 401 errors
+      localStorage.removeItem('siem_auth_token');
       const error = new Error('Unauthorized: Please log in again');
       error.status = 401;
       throw error;
@@ -50,7 +58,9 @@ const request = async (endpoint, options = {}) => {
       } catch (e) {
         // Ignore if response is not JSON
       }
-      const error = new Error(errorData?.error || errorData?.message || `HTTP error! status: ${response.status}`);
+      const errorMessage = errorData?.error || errorData?.message || `HTTP error! status: ${response.status}`;
+      console.error(`API error: ${errorMessage}`);
+      const error = new Error(errorMessage);
       error.status = response.status;
       error.data = errorData;
       throw error;
@@ -58,11 +68,13 @@ const request = async (endpoint, options = {}) => {
 
     // Handle cases where response might be empty (e.g., 204 No Content)
     if (response.status === 204) {
-        return null;
+      return null;
     }
 
     // Assume JSON response otherwise
-    return await response.json();
+    const data = await response.json();
+    console.log('API response data:', data);
+    return data;
 
   } catch (error) {
     console.error(`API call failed: ${options.method || 'GET'} ${url}`, error);
@@ -200,7 +212,20 @@ export const updateUserProfile = (profileData) => {
  * @returns {Promise<Object>} - Token verification result
  */
 export const verifyToken = () => {
-  return request('/verify-token');
+  console.log('Verifying token...');
+  
+  // If we don't have a token, don't even try to verify
+  const token = getAuthToken();
+  if (!token) {
+    console.error('No token to verify');
+    return Promise.reject(new Error('No token available'));
+  }
+  
+  return request('/verify-token')
+    .catch(error => {
+      console.error('Token verification failed:', error);
+      throw error;
+    });
 };
 
 // Export the request function for custom endpoints

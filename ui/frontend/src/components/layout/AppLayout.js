@@ -1,28 +1,42 @@
 import React from 'react';
-import { Box, AppBar, Toolbar, Typography, IconButton } from '@mui/material';
+import { Box, CssBaseline } from '@mui/material';
+import Header from './Header'; // Assuming Header contains the toggle button
+import Sidebar from './Sidebar';
 import { Outlet } from 'react-router-dom';
-import { 
-  Brightness4 as DarkModeIcon,
-  Brightness7 as LightModeIcon,
-} from '@mui/icons-material';
 
-const AppLayout = ({ toggleTheme, themeMode }) => {
+const AppLayout = ({ darkMode, toggleDarkMode }) => {
+  const [sidebarOpen, setSidebarOpen] = React.useState(true);
+
+  const handleSidebarToggle = () => {
+    setSidebarOpen(!sidebarOpen);
+  };
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <AppBar position="sticky">
-        <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            SIEM Platform
-          </Typography>
-          
-          <IconButton color="inherit" onClick={toggleTheme}>
-            {themeMode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
-          </IconButton>
-        </Toolbar>
-      </AppBar>
-      
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
-        <Outlet />
+    <Box sx={{ display: 'flex' }}>
+      <CssBaseline />
+      {/* Pass toggleDarkMode down to Header */}
+      <Header 
+        sidebarOpen={sidebarOpen} 
+        handleSidebarToggle={handleSidebarToggle} 
+        darkMode={darkMode} 
+        toggleDarkMode={toggleDarkMode} 
+      />
+      <Sidebar open={sidebarOpen} handleDrawerToggle={handleSidebarToggle} />
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: 3,
+          width: { sm: `calc(100% - ${sidebarOpen ? 240 : 60}px)` }, // Adjust width based on sidebar state
+          mt: '64px', // AppBar height
+          transition: (theme) => theme.transitions.create('margin', {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.leavingScreen,
+          }),
+          marginLeft: { sm: sidebarOpen ? `240px` : `60px` }, // Adjust margin based on sidebar state
+        }}
+      >
+        <Outlet /> {/* Renders the matched child route component */}
       </Box>
     </Box>
   );

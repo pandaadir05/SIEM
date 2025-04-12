@@ -22,9 +22,11 @@ import {
   Settings as SettingsIcon,
   Security as SecurityIcon,
   Menu as MenuIcon,
-  ChevronLeft as ChevronLeftIcon
+  ChevronLeft as ChevronLeftIcon,
+  Logout as LogoutIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Define drawer width
 const drawerWidth = 240;
@@ -33,10 +35,16 @@ const Sidebar = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, logout } = useAuth();
   const [open, setOpen] = useState(true);
 
   const handleDrawerToggle = () => {
     setOpen(!open);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
   };
 
   // Define navigation items
@@ -191,6 +199,55 @@ const Sidebar = () => {
             </ListItem>
           </Tooltip>
         ))}
+      </List>
+      <Divider />
+      <List>
+        <Tooltip
+          title={!open ? "Logout" : ''}
+          placement="right"
+        >
+          <ListItem disablePadding sx={{ display: 'block' }}>
+            <ListItemButton
+              sx={{
+                minHeight: 48,
+                justifyContent: open ? 'initial' : 'center',
+                px: 2.5,
+                backgroundColor: 'transparent',
+                '&:hover': {
+                  backgroundColor: 'rgba(0, 0, 0, 0.08)'
+                }
+              }}
+              onClick={handleLogout}
+            >
+              <ListItemIcon
+                sx={{
+                  minWidth: 0,
+                  mr: open ? 3 : 'auto',
+                  justifyContent: 'center',
+                  color: theme.palette.error.main
+                }}
+              >
+                <LogoutIcon />
+              </ListItemIcon>
+              {open && (
+                <ListItemText 
+                  primary="Logout" 
+                  sx={{ 
+                    opacity: open ? 1 : 0,
+                    color: theme.palette.error.main
+                  }} 
+                />
+              )}
+            </ListItemButton>
+          </ListItem>
+        </Tooltip>
+        {user && open && (
+          <ListItem sx={{ pl: 2, mt: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Logged in as: <b>{user.username}</b>
+            </Typography>
+          </ListItem>
+        )}
       </List>
     </div>
   );

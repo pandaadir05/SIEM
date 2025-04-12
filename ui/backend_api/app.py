@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import json
 import time  # Added import
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 from flask_cors import CORS
 from elasticsearch import Elasticsearch, NotFoundError
 import logging
@@ -18,13 +18,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Load configuration
+# Load configuration and adjust sys.path
 try:
     import sys
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+    # Add the SIEM root directory to sys.path so absolute imports work
+    siem_root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    if siem_root_dir not in sys.path:
+        sys.path.insert(0, siem_root_dir) # Insert at beginning to prioritize
     import config
 except ImportError as e:
-    logger.error(f"Failed to load config: {e}")
+    logger.error(f"Failed to load config or modify sys.path: {e}")
+    sys.exit(1)
+
+# Now import rbac using absolute path, after sys.path is modified
+try:
+    from ui.backend_api.rbac import validate_jwt, AuthError, get_token_from_request
+except ImportError as e:
+    logger.error(f"Failed to import rbac after modifying sys.path: {e}")
+    logger.error(f"Current sys.path: {sys.path}")
     sys.exit(1)
 
 # Initialize Flask app
@@ -59,25 +70,24 @@ def init_elasticsearch(max_retries=3, retry_delay=5):
 
 es = init_elasticsearch()
 
-# JWT Authentication (Decorator modified for temporary hardcoded token)
+# --- Authentication Decorator ---
 def auth_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        auth_header = request.headers.get('Authorization', '')
-        token = None
-        if auth_header.startswith('Bearer '):
-            token = auth_header.split(' ')[1]
-
-        # --- Temporary Hardcoded Token Check ---
-        if token == "fake-jwt-token-admin":
-            request.current_user = {"user_id": "admin", "role": "admin"}
-            logger.debug("Auth successful via temporary hardcoded token.")
+        try:
+            token = get_token_from_request()
+            payload = validate_jwt(token)
+            # Store user info in Flask's g object for access within the request
+            g.current_user = payload 
+            logger.debug(f"Auth successful for user: {payload.get('sub')}")
             return f(*args, **kwargs)
-        # --- End Temporary Check ---
-
-        logger.warning(f"Auth failed: Invalid or missing token. Header: '{auth_header[:30]}...'")
-        return jsonify({'error': 'Unauthorized', 'message': 'Valid Bearer token required'}), 401
-
+        except AuthError as e:
+            logger.warning(f"Auth failed: {e.error}")
+            return jsonify(e.error), e.status_code
+        except Exception as e:
+            logger.error(f"Unexpected error during authentication: {str(e)}")
+            return jsonify({"error": "Internal server error during authentication"}), 500
+            
     return decorated
 
 # Error handlers
@@ -105,72 +115,81 @@ def health():
 @app.route("/api/login", methods=["POST"])
 @common_metric
 def login():
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No data provided"}), 400
+    """Provide a simple login API for testing."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Missing request body"}), 400
+    
+    username = data.get("user")
+    password = data.get("password")
+    
+    if not username or not password:
+        return jsonify({"error": "Username and password are required"}), 400
+    
+    # For testing purposes - use hardcoded credentials
+    valid_credentials = {
+        "admin": "admin123",
+        "analyst": "analyst123",
+        "viewer": "viewer123"
+    }
+    
+    if username in valid_credentials and password == valid_credentials[username]:
+        # Determine role based on username
+        role = "admin" if username == "admin" else "analyst" if username == "analyst" else "viewer"
         
-        username = data.get("user")
-        password = data.get("password")
+        # Generate a JWT token (simple version for testing)
+        payload = {
+            "sub": username,
+            "role": role,
+            "exp": int(time.time()) + 3600  # 1 hour expiry
+        }
+        token = jwt.encode(payload, app.config["SECRET_KEY"], algorithm="HS256")
         
-        if not username or not password:
-            return jsonify({"error": "Missing username or password"}), 400
-
-        # TODO: Replace with proper authentication
-        if username == "admin" and password == "admin123":
-            token = jwt.encode(
-                {'user_id': username, 'role': 'admin', 'exp': datetime.utcnow() + timedelta(hours=24)},
-                app.config['SECRET_KEY'],
-                algorithm='HS256'
-            )
-            return jsonify({"token": token})
-        
-        logger.warning(f"Failed login attempt for user: {username}")
-        return jsonify({"error": "Invalid credentials"}), 401
-    except Exception as e:
-        logger.error(f"Login error: {e}")
-        return jsonify({"error": "Authentication failed"}), 500
-
-@app.route("/api/stats")
-@auth_required
-@common_metric
-def get_stats():
-    """ Provides basic stats like total alerts and critical alerts. """
-    if not es:
-        return jsonify({"error": "Elasticsearch not available"}), 503
-
-    try:
-        # Count total alerts
-        total_resp = es.count(index=config.ALERT_INDEX, body={"query": {"match_all": {}}})
-        total_alerts = total_resp.get('count', 0)
-
-        # Count critical alerts (adjust level field/values as needed)
-        critical_query = {
-            "query": {
-                "bool": {
-                    "should": [
-                        {"match": {"level": "high"}},
-                        {"match": {"level": "critical"}}
-                    ],
-                    "minimum_should_match": 1
-                }
+        # Return token and user data
+        return jsonify({
+            "token": token,
+            "user": {
+                "username": username,
+                "role": role
             }
-        }
-        critical_resp = es.count(index=config.ALERT_INDEX, body=critical_query)
-        critical_alerts = critical_resp.get('count', 0)
+        })
+    
+    return jsonify({"error": "Invalid credentials"}), 401
 
-        stats = {
-            "totalAlerts": total_alerts,
-            "criticalAlerts": critical_alerts,
-        }
-        return jsonify(stats)
+@app.route("/api/verify-token", methods=["GET"])
+@auth_required  # Use the decorator to ensure a valid token is present
+def verify_token():
+    """Verify the provided JWT token and return user information"""
+    # If @auth_required passes, g.current_user should be set
+    user_info = g.current_user
+    if not user_info:
+         # This case should ideally be caught by @auth_required
+         logger.error("User info not found in g after auth_required passed.")
+         return jsonify({"error": "Authentication check failed unexpectedly"}), 500
+         
+    # Return user data from token payload stored in g
+    return jsonify({
+        "username": user_info.get("sub"),
+        "role": user_info.get("role")
+    })
 
-    except NotFoundError:
-        logger.warning(f"Stats endpoint: Index '{config.ALERT_INDEX}' not found.")
-        return jsonify({"totalAlerts": 0, "criticalAlerts": 0})
+@app.route("/api/stats", methods=["GET"])
+@auth_required  # Apply the decorator here as well
+def get_stats():
+    """Get dashboard statistics"""
+    # Access user info if needed: user = g.current_user
+    logger.info(f"Stats requested by user: {g.current_user.get('sub')}")
+    try:
+        # Example hardcoded stats for demo purposes
+        return jsonify({
+            "total_alerts": 42,
+            "critical_alerts": 5,
+            "events_today": 1250,
+            "systems_monitored": 18
+        })
     except Exception as e:
-        logger.error(f"Error fetching stats: {e}", exc_info=True)
-        return jsonify({"error": "Failed to fetch statistics"}), 500
+        logger.error(f"Error getting stats: {str(e)}")
+        return jsonify({"error": "Failed to get statistics"}), 500
 
 # Main entry point
 if __name__ == "__main__":

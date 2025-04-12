@@ -1,81 +1,69 @@
-import React, { useState, useMemo } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useState, useMemo, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AppLayout from './components/layout/AppLayout';
 
 import Dashboard from './components/Dashboard/Dashboard';
 import TimelineView from './components/TimelineView';
+import LoginPage from './pages/LoginPage';
+import AlertsPage from './pages/AlertsPage';
 
-const AlertsPage = () => <div>Alerts Page (Coming Soon)</div>;
-const LoginPage = () => <div>Login Page (Coming Soon)</div>;
 const NotFound = () => <div>404 - Page Not Found</div>;
 
 const ProtectedRoute = ({ children }) => {
+  const { isAuthenticated, loading } = useAuth();
+  const location = useLocation();
+  
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+  
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  
   return children;
 };
 
 function App() {
-  const [mode, setMode] = useState(() => {
-    const savedMode = localStorage.getItem('theme-mode');
-    return savedMode || 'light';
+  const [darkMode, setDarkMode] = useState(() => {
+    // Get theme preference from localStorage with fallback
+    const savedMode = localStorage.getItem('darkMode');
+    return savedMode === 'true';
   });
-
-  const toggleTheme = () => {
-    const newMode = mode === 'light' ? 'dark' : 'light';
-    setMode(newMode);
-    localStorage.setItem('theme-mode', newMode);
+  
+  const toggleDarkMode = () => {
+    console.log('Toggling dark mode from', darkMode, 'to', !darkMode);
+    const newMode = !darkMode;
+    setDarkMode(newMode);
+    localStorage.setItem('darkMode', String(newMode));
   };
-
+  
   const theme = useMemo(
     () =>
       createTheme({
         palette: {
-          mode,
+          mode: darkMode ? 'dark' : 'light',
           primary: {
-            main: '#2196f3',
+            main: '#3f51b5',
           },
           secondary: {
             main: '#f50057',
           },
-          background: {
-            default: mode === 'light' ? '#f5f5f5' : '#121212',
-            paper: mode === 'light' ? '#ffffff' : '#1e1e1e',
-          },
-        },
-        typography: {
-          fontFamily: [
-            '-apple-system',
-            'BlinkMacSystemFont',
-            '"Segoe UI"',
-            'Roboto',
-            '"Helvetica Neue"',
-            'Arial',
-            'sans-serif',
-          ].join(','),
-        },
-        components: {
-          MuiButton: {
-            styleOverrides: {
-              root: {
-                borderRadius: 8,
-              },
-            },
-          },
-          MuiPaper: {
-            styleOverrides: {
-              root: {
-                borderRadius: 8,
-              },
-            },
-          },
         },
       }),
-    [mode]
+    [darkMode]
   );
-
+  
+  // Ensure theme update is applied globally
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
+    console.log('Theme updated to:', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
+  
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -83,17 +71,15 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <AppLayout toggleTheme={toggleTheme} themeMode={mode} />
-                </ProtectedRoute>
-              }
-            >
+            
+            <Route path="/" element={
+              <ProtectedRoute>
+                <AppLayout darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+              </ProtectedRoute>
+            }>
               <Route index element={<Dashboard />} />
-              <Route path="timeline" element={<TimelineView />} />
               <Route path="alerts" element={<AlertsPage />} />
+              <Route path="timeline" element={<TimelineView />} />
               <Route path="search" element={<div>Search Page (Coming Soon)</div>} />
               <Route path="reports" element={<div>Reports Page (Coming Soon)</div>} />
               <Route path="rules" element={<div>Rules Management (Coming Soon)</div>} />

@@ -58,23 +58,34 @@ def get_token_from_request():
 def validate_jwt(token):
     """Validate JWT token and return payload."""
     try:
-        # Get the secret key from Flask app config
-        secret_key = current_app.config.get('JWT_SECRET_KEY')
-        if not secret_key:
-            logger.error("JWT_SECRET_KEY not configured in application")
-            raise AuthError({'code': 'invalid_config', 'description': 'JWT configuration error'}, 500)
+        # Decode token using the secret key from app config
+        payload = jwt.decode(
+            token, 
+            current_app.config["SECRET_KEY"], 
+            algorithms=["HS256"]
+        )
         
-        payload = jwt.decode(token, secret_key, algorithms=['HS256'])
-        
-        # Check if token is expired
-        if 'exp' in payload and payload['exp'] < time.time():
-            raise AuthError({'code': 'token_expired', 'description': 'Token has expired'}, 401)
-            
+        # Check expiry if present
+        if "exp" in payload and payload["exp"] < time.time():
+             raise AuthError({'code': 'token_expired', 'description': 'Token has expired'}, 401)
+             
+        # Basic check for required fields (e.g., subject)
+        if "sub" not in payload:
+             raise AuthError({'code': 'invalid_claims', 'description': 'Token missing required claims (sub)'}, 401)
+             
+        logger.debug(f"JWT validated successfully for sub: {payload.get('sub')}")
         return payload
         
+    except jwt.ExpiredSignatureError:
+        logger.warning("Token validation failed: Expired signature")
+        raise AuthError({'code': 'token_expired', 'description': 'Token has expired'}, 401)
     except jwt.InvalidTokenError as e:
-        logger.warning(f"Invalid token: {str(e)}")
-        raise AuthError({'code': 'invalid_token', 'description': f'Invalid token: {str(e)}'}, 401)
+        logger.warning(f"Token validation failed: Invalid token - {str(e)}")
+        raise AuthError({'code': 'invalid_token', 'description': 'Invalid token'}, 401)
+    except Exception as e:
+        # Catch potential configuration errors or other issues
+        logger.error(f"Unexpected error during JWT validation: {str(e)}")
+        raise AuthError({'code': 'validation_error', 'description': 'Could not validate token'}, 500)
 
 def has_required_permissions(user_permissions, required_permission):
     """Check if user has the required permission."""
