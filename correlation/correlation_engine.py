@@ -104,8 +104,11 @@ def main():
                             "tags": rule_dict.get("tags", [])
                         }
                         producer.send(config.ALERTS_TOPIC, alert_doc)
-                        es.index(index=config.ALERT_INDEX, document=alert_doc)
-                        logger.info(f"SIGMA ALERT: {alert_doc['alert_type']} | Rule: {alert_doc['rule_id']} | MITRE: {mitre}")
+                        try:
+                            res = es.index(index=config.ALERT_INDEX, document=alert_doc)
+                            logger.info(f"SIGMA ALERT Indexed: {alert_doc['alert_type']} | Rule: {alert_doc['rule_id']} | ES ID: {res.get('_id')}")
+                        except Exception as es_exc:
+                            logger.error(f"Failed to index SIGMA ALERT '{alert_doc['alert_type']}' to Elasticsearch: {es_exc}", exc_info=True)
                 except Exception as rule_exc:
                     logger.error(f"Error evaluating rule '{rule_dict.get('title')}': {rule_exc}", exc_info=True)
 
@@ -122,8 +125,11 @@ def main():
                         "user": event.get("user")
                     }
                     producer.send(config.ALERTS_TOPIC, alert_doc)
-                    es.index(index=config.ALERT_INDEX, document=alert_doc)
-                    logger.info(f"MULTI-STEP ALERT triggered for IP: {event.get('ip')}!")
+                    try:
+                        res = es.index(index=config.ALERT_INDEX, document=alert_doc)
+                        logger.info(f"MULTI-STEP ALERT Indexed for IP: {event.get('ip')} | ES ID: {res.get('_id')}")
+                    except Exception as es_exc:
+                        logger.error(f"Failed to index MULTI-STEP ALERT for IP '{event.get('ip')}' to Elasticsearch: {es_exc}", exc_info=True)
             except Exception as multi_step_exc:
                 logger.error(f"Error during multi-step processing: {multi_step_exc}", exc_info=True)
 
