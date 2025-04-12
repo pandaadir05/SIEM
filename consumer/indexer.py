@@ -5,7 +5,7 @@ import sys
 import os
 import signal
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from kafka import KafkaConsumer
 from elasticsearch import Elasticsearch, helpers, exceptions as es_exceptions
 import logging
@@ -128,12 +128,25 @@ class ESIndexer:
             # Parse the JSON
             doc = json.loads(raw_str)
             
-            # Add @timestamp if not exists
-            if '@timestamp' not in doc:
-                doc['@timestamp'] = datetime.utcfromtimestamp(
-                    doc.get('timestamp', time.time())
-                ).isoformat() + 'Z'
+            # --- Timestamp Handling ---
+            original_timestamp_float = doc.get('timestamp')
             
+            if original_timestamp_float:
+                # Ensure @timestamp is correctly formatted ISO 8601 UTC
+                dt_object = datetime.fromtimestamp(original_timestamp_float, tz=timezone.utc)
+                doc['@timestamp'] = dt_object.isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+                
+                # Convert original 'timestamp' field to epoch milliseconds (integer)
+                # This matches the default 'epoch_millis' format expected by ES date type
+                doc['timestamp'] = int(original_timestamp_float * 1000)
+            else:
+                # Fallback if original timestamp is missing
+                now_dt = datetime.now(timezone.utc)
+                doc['@timestamp'] = now_dt.isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+                # Add timestamp in milliseconds if it was missing
+                doc['timestamp'] = int(now_dt.timestamp() * 1000)
+            # --- End Timestamp Handling ---
+
             with self.lock:
                 self.message_buffer.append(doc)
                 

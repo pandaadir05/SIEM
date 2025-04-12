@@ -144,9 +144,12 @@ function TimelineView() {
   
   const containerRef = useRef(null);
   
-  // Modified fetchEvents to remove the dependency on itself
+  // Fix fetchEvents to include all required dependencies
   const fetchEvents = useCallback(async (resetPage = false) => {
     const currentPage = resetPage ? 1 : page;
+    if (resetPage) {
+      setPage(1); // Ensure page state is also reset
+    }
     
     setIsLoading(true);
     setError(null);
@@ -160,28 +163,45 @@ function TimelineView() {
         range: timeRange
       };
       
+      console.log('Fetching timeline events with params:', params);
       const response = await getLogs(params);
-      setEvents(response.logs || []);
-      setTotal(response.total || 0);
+      console.log('Timeline response:', response);
+      
+      if (response && Array.isArray(response.logs)) {
+        setEvents(response.logs);
+        setTotal(response.total || 0);
+      } else {
+        console.error('Invalid response format:', response);
+        setError('Received invalid data format from server');
+        setEvents([]);
+        setTotal(0);
+      }
     } catch (err) {
       setError(err.message || 'Error loading events');
       console.error('Failed to fetch logs:', err);
+      setEvents([]);
     } finally {
       setIsLoading(false);
     }
-  }, [page, pageSize, searchQuery, filterType, timeRange]);
+  }, [page, pageSize, searchQuery, filterType, timeRange]); // Include all dependencies
 
-  // Initial fetch
+  // Initial fetch - use a ref to prevent duplicate requests
+  const initialFetchDone = useRef(false);
   useEffect(() => {
-    fetchEvents();
+    if (!initialFetchDone.current) {
+      fetchEvents();
+      initialFetchDone.current = true;
+    }
   }, [fetchEvents]);
   
-  // Add automatic refresh (e.g., every 30 seconds)
+  // Fix auto-refresh with a stable reference to the current fetchEvents function
   useEffect(() => {
-    const intervalId = setInterval(() => {
-      fetchEvents();
-    }, 30000);
+    const refresh = () => {
+      console.log('Auto-refreshing timeline...');
+      fetchEvents(false); // Don't reset page on auto-refresh
+    };
     
+    const intervalId = setInterval(refresh, 30000);
     return () => clearInterval(intervalId);
   }, [fetchEvents]);
   
@@ -214,6 +234,16 @@ function TimelineView() {
   
   const totalPages = Math.ceil(total / pageSize);
 
+  // Add debug button to help troubleshoot
+  const handleDebugClick = () => {
+    console.log('Current timeline state:', {
+      page, pageSize, searchQuery, filterType, timeRange,
+      eventsCount: events.length,
+      totalEvents: total
+    });
+    fetchEvents();
+  };
+
   return (
     <Box>
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -221,14 +251,26 @@ function TimelineView() {
           Event Timeline
         </Typography>
         
-        <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
-          onClick={() => fetchEvents()}
-          disabled={isLoading}
-        >
-          Refresh
-        </Button>
+        <Box>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={() => fetchEvents()}
+            disabled={isLoading}
+            sx={{ mr: 1 }}
+          >
+            Refresh
+          </Button>
+          {/* Debug button - consider removing in production */}
+          <Button
+            variant="text"
+            color="secondary"
+            size="small"
+            onClick={handleDebugClick}
+          >
+            Debug
+          </Button>
+        </Box>
       </Box>
       
       <Paper sx={{ mb: 3, p: 2 }}>
