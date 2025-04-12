@@ -1,13 +1,19 @@
-// Basic API client using fetch
+// Enhanced API client with better error handling and token management
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-// Function to get the auth token (replace with your actual token storage mechanism)
+// Function to get the auth token from context or localStorage
 const getAuthToken = () => {
-  // Example: return localStorage.getItem('authToken');
-  return "fake-jwt-token-admin"; // Placeholder - REMOVE THIS
+  // Try to get token from localStorage
+  return localStorage.getItem('siem_auth_token');
 };
 
+/**
+ * Generic request function with error handling
+ * @param {string} endpoint - API endpoint (without base URL)
+ * @param {Object} options - Fetch options
+ * @returns {Promise<Object>} - Response data
+ */
 const request = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL}${endpoint}`;
   const token = getAuthToken();
@@ -29,6 +35,13 @@ const request = async (endpoint, options = {}) => {
   try {
     const response = await fetch(url, config);
 
+    // Check for unauthorized (could trigger logout)
+    if (response.status === 401) {
+      const error = new Error('Unauthorized: Please log in again');
+      error.status = 401;
+      throw error;
+    }
+
     if (!response.ok) {
       // Try to parse error message from backend
       let errorData;
@@ -37,7 +50,7 @@ const request = async (endpoint, options = {}) => {
       } catch (e) {
         // Ignore if response is not JSON
       }
-      const error = new Error(errorData?.error || `HTTP error! status: ${response.status}`);
+      const error = new Error(errorData?.error || errorData?.message || `HTTP error! status: ${response.status}`);
       error.status = response.status;
       error.data = errorData;
       throw error;
@@ -58,7 +71,12 @@ const request = async (endpoint, options = {}) => {
   }
 };
 
-// Define specific API functions
+/**
+ * Login function
+ * @param {string} username - Username
+ * @param {string} password - Password
+ * @returns {Promise<Object>} - Authentication data including token
+ */
 export const login = (username, password) => {
   return request('/login', {
     method: 'POST',
@@ -68,22 +86,122 @@ export const login = (username, password) => {
   });
 };
 
+/**
+ * Get logs with optional filtering and pagination
+ * @param {Object} params - Query parameters
+ * @returns {Promise<Object>} - Logs data with pagination
+ */
 export const getLogs = (params = {}) => {
-  const query = new URLSearchParams(params).toString();
-  return request(`/logs?${query}`);
+  const query = new URLSearchParams();
+  
+  // Add all params to query string
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      query.append(key, value);
+    }
+  });
+  
+  return request(`/logs?${query.toString()}`);
 };
 
+/**
+ * Get alerts with optional filtering and pagination
+ * @param {Object} params - Query parameters
+ * @returns {Promise<Object>} - Alerts data with pagination
+ */
 export const getAlerts = (params = {}) => {
-   const query = new URLSearchParams(params).toString();
-  return request(`/alerts?${query}`);
+  const query = new URLSearchParams();
+  
+  // Add all params to query string
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      query.append(key, value);
+    }
+  });
+  
+  return request(`/alerts?${query.toString()}`);
 };
 
+/**
+ * Get a specific alert by ID
+ * @param {string} alertId - Alert ID
+ * @returns {Promise<Object>} - Alert data
+ */
 export const getAlertById = (alertId) => {
   return request(`/alerts/${alertId}`);
 };
 
+/**
+ * Update alert status
+ * @param {string} alertId - Alert ID
+ * @param {Object} updateData - Data to update
+ * @returns {Promise<Object>} - Updated alert data
+ */
+export const updateAlert = (alertId, updateData) => {
+  return request(`/alerts/${alertId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updateData)
+  });
+};
+
+/**
+ * Get dashboard statistics
+ * @returns {Promise<Object>} - Dashboard statistics
+ */
 export const getStats = () => {
   return request('/stats');
 };
 
-// Add other API functions as needed (e.g., getRules, updateRule, etc.)
+/**
+ * Search logs with query string
+ * @param {string} query - Search query
+ * @param {Object} options - Search options
+ * @returns {Promise<Object>} - Search results
+ */
+export const searchLogs = (query, options = {}) => {
+  const params = new URLSearchParams({
+    q: query,
+    ...options
+  });
+  
+  return request(`/search?${params.toString()}`);
+};
+
+/**
+ * Get available rules
+ * @returns {Promise<Array>} - List of rules
+ */
+export const getRules = () => {
+  return request('/rules');
+};
+
+/**
+ * Get user profile
+ * @returns {Promise<Object>} - User profile data
+ */
+export const getUserProfile = () => {
+  return request('/user/profile');
+};
+
+/**
+ * Update user profile
+ * @param {Object} profileData - Profile data to update
+ * @returns {Promise<Object>} - Updated profile data
+ */
+export const updateUserProfile = (profileData) => {
+  return request('/user/profile', {
+    method: 'PATCH',
+    body: JSON.stringify(profileData)
+  });
+};
+
+/**
+ * Verify current authentication token
+ * @returns {Promise<Object>} - Token verification result
+ */
+export const verifyToken = () => {
+  return request('/verify-token');
+};
+
+// Export the request function for custom endpoints
+export const apiRequest = request;
