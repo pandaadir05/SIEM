@@ -1,8 +1,34 @@
-kafka-python==2.0.2
-elasticsearch==7.17.6 # Match ES version if possible
-PyYAML==6.0.1 # Updated from 6.0
-requests==2.31.0
-Flask==2.3.2
-prometheus_client==0.16.0
-python-dotenv==1.0.1 # Added for .env support
-# Add other dependencies like PyJWT if needed
+# Core Dependencies
+kafka-python>=2.0.2
+elasticsearch>=7.17.6
+Flask>=2.3.2
+flask-cors>=4.0.0
+gunicorn>=20.1.0
+python-dotenv>=1.0.0
+
+# Security
+PyJWT>=2.8.0
+cryptography>=41.0.0
+
+# Monitoring & Metrics
+prometheus-flask-exporter>=0.22.0
+prometheus-client>=0.16.0
+
+# Data Processing
+PyYAML>=6.0.1
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.2.0
+
+# Logging & File Monitoring
+python-json-logger>=2.0.7
+watchdog>=3.0.0
+
+# Testing
+pytest>=7.3.1
+pytest-cov>=4.0.0
+
+# Development Tools
+black>=23.3.0  # Code formatting
+flake8>=6.0.0  # Linting
+pylint>=2.17.0  # Static code analysis
